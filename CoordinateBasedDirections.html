@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  	<script src="/prefixfree.min.js"></script>
+     <script src="/socket.io/socket.io.js"></script>
+   <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Displaying text directions with <code>setPanel()</code></title>
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 650px;
+		width: 900px;
+		left: 50px;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #right-panel {
+        font-family: 'Roboto','sans-serif';
+        line-height: 30px;
+        padding-left: 10px;
+      }
+
+      #right-panel select, #right-panel input {
+        font-size: 15px;
+      }
+
+      #right-panel select {
+        width: 100%;
+      }
+
+      #right-panel i {
+        font-size: 12px;
+      }
+      #right-panel {
+        height: 100%;
+        float: right;
+        width: 390px;
+        overflow: auto;
+      }
+      #map {
+        margin-right: 400px;
+      }
+      @media print {
+        #map {
+          height: 500px;
+          margin: 0;
+        }
+        #right-panel {
+          float: none;
+          width: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+  
+  
+  
+  <FORM NAME="names">
+<INPUT TYPE="hidden" NAME="flname">
+</FORM>
+
+<SCRIPT LANGUAGE="javascript">
+var currentAdd="", endAdd="";
+var locate = window.location;
+document.names.flname.value = locate;
+
+var text = document.names.flname.value;
+
+function delineate(str)
+{
+theleft = str.indexOf("=") + 1;
+theright = str.lastIndexOf("&");
+return(str.substring(theleft, theright));
+}
+
+console.log(delineate(text));
+
+function delineate2(str)
+{
+point = str.lastIndexOf("=");
+return(str.substring(point+1,str.length));
+}
+//document.write("Last Name is " +delineate2(text));
+console.log(delineate2(text));
+</SCRIPT> 
+  
+  
+    <div>
+		
+	</div>
+	<div>
+	  <select id="start" hidden>
+		<option value="1410 S Tucker Blvd, mo"></option>
+	  </select>
+	  <select id="end" hidden>
+		<option value="1000 N 19th St, mo"></option>
+	  </select>
+    <div id="right-panel"></div>
+    <div id="map"></div>
+    </div>
+	<script>
+	
+	var socket = io();
+	var queryStage = 0;
+	var gen;
+	var isChild;
+	var isVeteran;
+	var isEmployed;
+	var isPregnant;
+	var hasCrimHist;
+	var isSexOffender;
+	var myId;
+	var currentLat, currentLon;
+	var min=10000, sheltID;
+	var done = false;
+			
+	// Functions for parsing text
+	// Will read from first = to first &
+	function parse(text)
+	{
+		var result = text.split(/=|&/);
+		return result;
+	}
+	
+	// Set ID
+	myId = parse(text)[5];
+
+	function calculateAndDisplayRoute(directionsService, directionsDisplay) 
+	{
+		socket.on("queryResult",
+				  function(data)
+				  {
+					console.log("Received data for stage " + queryStage);
+					if(queryStage < 1)
+					{
+						if(data[0])
+						{
+							console.log("query stage 1 entered");
+							console.log(delineate(text));
+							console.log(delineate2(text));
+							console.log(JSON.stringify(data[0]));
+							gen = data[0].GENDER;
+							isChild = data[0].ISCHILD;
+							isVeteran = data[0].ISVETEREN;
+							isEmployed = (data[0].INCOME>0);
+							isPregnant = data[0].ISPREGNANT;
+							hasCrimHist = data[0].HASCRIMHIST;
+							isSexOffender = data[0].ISSEXOFFENDER;
+							queryStage = 2;
+							console.log("finished stage: " + (queryStage - 1));
+				
+					
+							socket.emit("query", "SELECT * FROM Clients WHERE FIRST_NAME = \"" + parse(text)[1] + "\"" + " AND LAST_NAME = \"" + parse(text)[3] + "\"");
+						}
+						else
+						{
+							alert("Error: this person is not registered with our system!");
+						}
+					}
+					else if(queryStage == 2)
+					{
+						console.log("query stage: "+queryStage);
+						// What to do when I have my id
+						console.log("location"+window.location.hostname);
+						// Retrieve
+						//myId = localStorage.getItem("userID");
+
+						queryStage = 3;
+						console.log("query stage: "+queryStage);
+						
+						socket.emit("query", "SELECT * FROM Shelter WHERE SHELTER_ID = " + myId);
+					}
+					else if(queryStage == 3)
+					{
+						console.log("query stage: "+queryStage);
+						console.log(data[0]);
+						currentLat = data[0].X_COOR;
+						currentLon = data[0].Y_COOR;
+						currentAdd = data[0].ADDRESS;
+						console.log(currentAdd);
+						
+						console.log("Queried 3, stage: " + queryStage );	
+						socket.emit("query", "SELECT * FROM Shelter WHERE VETERANONLY <= " + isVeteran + " AND ACCEPTPREG >= " + isPregnant
+									+ " AND CRIMINALHISTORY >= " + hasCrimHist + " AND SEXOFFENDER >= " + isSexOffender + " AND AVAIL_SPACE > 0");						
+						queryStage = 4;
+					
+					}
+					else if(queryStage == 4 && !done)
+					{
+					
+						console.log(data[0]);
+						//Need to know this person's name and current shelter
+						for(var ctr = 0; ctr < data.length; ctr++)
+						{
+                            if(myId != data[ctr].SHELTER_ID)
+							{
+								var dLat = 69 * (currentLat-data[ctr].X_COOR);
+								var dLon = 69 * (currentLon-data[ctr].Y_COOR); 
+								var d = Math.sqrt(Math.pow(dLat, 2) + Math.pow(dLat, 2));
+								if(d < min)
+								{
+									min = d;
+									sheltID = data[ctr].SHELTER_ID;
+									if(endAdd==""){
+									
+										endAdd = data[ctr].ADDRESS;
+										document.getElementById("start").value = currentAdd;
+										document.getElementById("end").value = endAdd;
+									}
+									else
+										break;
+									console.log("end address: "+endAdd);
+									
+								}
+							}
+							
+						}
+						
+						// Move stuff
+						console.log(endAdd, currentAdd);
+						var start;
+						var end;
+						end = endAdd;
+						start = currentAdd;
+						console.log("end: "+endAdd+" start: "+start);
+						directionsService.route({origin: start,
+												 destination: end,
+												 travelMode: 'WALKING'}, 
+												 
+												 function(response, status) 
+												 {
+												      console.log("Did a query!");
+													  if (status === 'OK') 
+													  {
+														directionsDisplay.setDirections(response);
+														done = true;
+													  }
+													  else 
+													  {
+														window.alert('Directions request failed due to ' + status);
+													  }
+												});
+					}
+					// Query the server
+					
+								//queryStage = 5;
+					
+					});
+		
+		function finde()
+		{
+			console.log("finde() started");
+			// Prep callback for queryResult
+			
+			socket.emit("query", "SELECT * FROM Clients WHERE FIRST_NAME = \"" + parse(text)[1] + "\" AND LAST_NAME = \"" + parse(text)[3]+"\"");	  
+		}
+				
+      
+		finde();
+		
+    }
+	  
+	  function initMap() 
+	  {
+        var directionsDisplay = new google.maps.DirectionsRenderer;
+        var directionsService = new google.maps.DirectionsService;
+        var map = new google.maps.Map(document.getElementById('map'), { zoom: 10 });
+        directionsDisplay.setMap(map);
+        directionsDisplay.setPanel(document.getElementById('right-panel'));
+
+        var control = document.getElementById('floating-panel');
+        map.controls[google.maps.ControlPosition.TOP_CENTER].push(control);
+        calculateAndDisplayRoute(directionsService, directionsDisplay);
+      }
+	  
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDOvvxSHgm_-FYFRbWY2KtJiFjwRkGZEhc&callback=initMap"
+			async defer>
+    </script>
+  </body>
+</html>

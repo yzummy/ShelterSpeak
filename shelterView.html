@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<head>
+	<link rel="stylesheet" type="text/css" href="ShelterView.css">
+	<title>Shelter name here</title>
+
+</head>
+<body>
+ <div class = "body"></div>
+	<!-- Display the avalibility of 1 similar shelter within a set distance -->
+	<div class = "column1", id="nearbyShelterInfo">
+		This Shelter ~ <input type="text", id="thisShelter", placeholder="Name of This Shelter" disabled><br>
+		Avalible Beds ~ <input type="text", id="availSpace", placeholder="Available beds" disabled><br><br>
+		Nearby Shelter* ~ <input type="text", id="shelterName", class = "input input1" placeholder="Shelter Name" disabled></input><br>
+		Avalible Beds ~ <input type="text", id="availSpaceNear", placeholder="Avalible beds" disabled><br>
+		Approx. Distance ~ <input type="text", id="distToShelter", placeholder="Distance" disabled> mi.<br> 
+		<p>*Nearest shelter that accepts similar demographics to your shelter</p>
+	</div>
+
+	<!-- Cool popup window, can't get it to work :(
+	<div id="modal", class="modal" hidden>
+		<div class ="modal-content">
+			<span class = "close" id = "modClose">X</span>
+			Name: <input type="text", id="modName", placeholder="n/a" disabled></input><br>
+			SSN: <input type="text", id="modSsn", placeholder="n/a" disabled></input><br>
+			DOB: <input type="text", id="modDob", placeholder="n/a" disabled></input><br>
+			Shelter: <input type="text", id="modShelter", placeholder="n/a" disabled></input><br>
+			Ethnicity: <input type="text", id="modRace", placeholder="n/a" disabled></input><br>
+			Income: <input type="text", id="modIncom", placeholder="n/a" disabled></input><br>
+			Is Pregnant: <input type="text", id="modPregnant", placeholder="n/a" disabled></input><br>
+			Ciminal History: <input type="text", id="modCrimHist", placeholder="n/a" disabled></input><br>
+			Sex Offender: <input type="text", id="modSexOff", placeholder="n/a" disabled></input><br>
+		</div>
+	</div> -->
+
+	<!-- hold the links to other pages -->
+	<div class ="column1 column2", id="functions">
+		<button type="button", class="button" onclick="window.open('register.html');">Register New Person</button>
+		<br>
+		<br>
+		Find the Nearest Suitable Shelter<br>
+		<!--Or Update Person Info*<br>-->
+		<!--<button type="submit", class="button", id = "sub">Search</button>-->
+		<FORM METHOD="LINK" ACTION="CoordinateBasedDirections.html" target="_blank">
+			<input name="fname", id = "searchfName", placeholder="First"></input>
+			<input name="lname", id="searchlName", placeholder="Last"></input><br>
+			<input name="id" id="myid", disabled, hidden></input> <!-- contains user ID to pass -->
+			<button type="submit", id="bFindShel">Find Suitable Shelter</button><br></FORM>
+		<p>*This person must be registered in the system first</p>
+		<br>
+		<br>
+		
+		
+	</div>
+	<!-- display a list of the incoming transfers -->
+	<!-- display a list of the incoming transfers -->
+	<div class = "column1 column3", id="transfers">
+		<!-- Incoming Transfers<br>
+		<!-- For each trasfer request
+		<!-- Display name
+		Name: <br><input name="fName", type="text", placeholder="First" disabled></input>
+		<input name="lName", type="text", placeholder="Last" disabled></input><br>
+		<!-- Check in button
+		<button type="button" class="button">Accept</button>
+			<!-- Clicking button updates users location info with their new location
+		<button type="button" class="button">Reject</button>-->
+		
+		Send a transfer request to another shelter<br>
+		<input type = "text", name="fName", id="transfName", placeholder="First"></input>
+		<input type = "text", name="lName", id="translName", placeholder="Last"></input><br>
+		<input type = "text", name="shelterId", id="transSheltId", placeholder="Shelter ID"></input><br>
+		<!-- onclick= sent trasfer request to slected location -->
+		<button type="submit" class="button", id = "bTransfer">Transfer</button>
+        </div>
+
+	<script src = "/socket.io/socket.io.js"></script>
+
+	<script>
+          socket = io();
+          var myId = 0;
+	  var myData = false;
+	  var queryStage = 0;
+          
+	  // For transferring people
+	  document.getElementById("bTransfer").onclick=
+	    function()
+		{
+		  // Change client's id
+		  socket.emit("run", "UPDATE Clients SET SHELTER_ID = " + document.getElementById("transSheltId").value + " WHERE FIRST_NAME = \"" + document.getElementById("transfName").value + "\" AND LAST_NAME = \"" + document.getElementById("translName").value + "\"");
+		  // Decrease that shelter's vacancies
+		  socket.emit("run", "UPDATE Shelter SET AVAIL_SPACE = AVAIL_SPACE-1 WHERE SHELTER_ID = " + document.getElementById("transSheltId").value);
+		  // Increase our vacancies
+		  socket.emit("run", "UPDATE Shelter SET AVAIL_SPACE = AVAIL_SPACE+1 WHERE SHELTER_ID = " + myId);
+		  // Make it show up
+		  document.getElementById("availSpace").value = document.getElementById("availSpace") + 1;
+		}
+      // Massive function for processing sql returns
+	  socket.on("queryResult",
+			function(data)
+			{
+		      if(queryStage == 0)
+		      {
+		        // User must've queried themselves
+				myData = data[0];
+				console.log("My data: " + JSON.stringify(myData));
+	        	// Fill in available beds
+				document.getElementById("availSpace").value = myData.AVAIL_SPACE;
+				document.getElementById("thisShelter").value = myData.NAME;
+			
+				// Waitlist?
+		        // Query whole database
+				// Query the database for all other shelters
+				console.log("Querying database...");
+				queryStage = 1;
+				socket.emit("query", "SELECT * FROM Shelter");
+			  }
+		      else if (queryStage == 1 && myData && data)
+		      {
+		        // User must've queried the db
+				console.log("Got " + data.length + " data!");
+		        // For holding the closest thing
+		        var min = data[0];
+				// Precaution
+				min.X_COORD = 1000000;
+				min.Y_COORD = 1000000;
+		        // Distance formula
+		        d = function(xf, yf, xi, yi)
+		            {
+		              console.log(xf + "-" + xi + ", " + yf + "-" + yi);
+					  return Math.sqrt(Math.pow(xf-xi, 2) + Math.pow(yf-yi,2));
+					};
+
+                         // Flip through data
+		         for(var i = 0; i < data.length; i ++)
+		         {
+		           // Find min distance, ignore myData, ignore shelters with no besd
+		           if(data[i].SHELTER_ID != myData.SHELTER_ID && data[i].AVAIL_SPACE > 0)
+		           {
+		             if(d(myData.X_COOR, data[i].X_COOR, myData.Y_COOR, data[i].Y_COOR)  < d(myData.X_COOR, min.X_COOR, myData.Y_COOR, min.Y_COOR))
+		             {
+		               min = data[i];
+		             }
+		           }
+		         }
+
+			 // Min is now the closest thing to us (we can repeat this later to get, say, the 4 closest)
+			 // Display min
+			 document.getElementById("shelterName").value = min.NAME;
+			 document.getElementById("availSpaceNear").value = min.AVAIL_SPACE;
+			 document.getElementById("distToShelter").value=(d(myData.X_COOR, myData.Y_COOR, min.X_COOR, min.Y_COOR) * 69 /*mi/degree*/).toFixed(5);
+		         // On to populate the incoming table
+			 queryStage = 4;
+			 socket.emit("query", "SELECT * FROM Clients");
+		      }
+		      else if(queryStage == 2)
+		      {
+		        // Pull latest from waiting list
+			var person = data[0];
+
+
+
+			// Add button functionality
+			document.getElementById("bCheckIn").onclick =
+				                            function()
+							    {
+						              // Run a query to add person to our shelter
+							      socket.emit("run", "UPDATE Clients SET shelter_id=" + myData.SHELTER_ID + " WHERE user_id=" + person.USER_ID);
+							      // Run a query to remove person from waitlist
+							      
+							      // Run a query to decrease our available space
+							      socket.emit("run", "UPDATE Shelter SET avail_space=avail_space-1 WHERE shelter_id=" + myData.SHELTER_ID);
+							    };
+			// Remove - ignores person
+			document.getElementById("bRemove").onclick =
+				                           function()
+							   {
+						             // Run a query to erase person
+							   };
+		      }
+                    });
+
+	  // What to do when I have my id
+          socket.on("foundYou",
+	            function(id)
+		    {
+		      myId = id;
+              // Set that secret id field
+			  document.getElementById("myid").value=myId;
+              // Query stuff and fill in
+		      console.log("I was found: " + id);
+		      console.log("Querying me");
+			  socket.emit("query", "SELECT * FROM Shelter WHERE shelter_id = " + myId);  
+              // Run query line every 1 minute
+			  setTimeout(function()
+						  {
+							socket.emit("query", "SELECT * FROM Shelter WHERE shelter_id = " + myId);        
+						  }, 1000 * 60);
+		    });
+	  // Rip I wasn't found
+          socket.on("notFoundYou",
+	            function()
+		    {
+		      // Log back in
+		      window.location.pathname = "/index";
+		    });
+	  // Find me
+          socket.emit("findme", window.location.hostname);
+        </script>
+</body>
